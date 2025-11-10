@@ -1,0 +1,238 @@
+// スプレッドシートID
+const SPREADSHEET_ID = '1vfYodpT9_4GhF86pk2g518EUz1WgVFs-hgaSGQttM4o';
+
+/**
+ * WebアプリのGETリクエストを処理するメイン関数
+ */
+function doGet(e) {
+  const page = e.parameter.page;
+  let output;
+
+  if (page === 'history') {
+    output = HtmlService.createHtmlOutputFromFile('admin') // admin.htmlを履歴ページとして使用
+      .setTitle('過去日報一覧');
+  } else {
+    output = HtmlService.createHtmlOutputFromFile('index')
+      .setTitle('工事日報アプリ');
+  }
+  
+  output.addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  return output;
+}
+
+/**
+ * WebアプリのベースURLを取得する関数
+ */
+function getWebAppUrl() {
+  return ScriptApp.getService().getUrl();
+}
+
+/**
+ * 初期表示に必要なマスタデータを全て取得する
+ */
+function getInitialData() {
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    // 各マスタシートを取得
+    const siteMasterSheet = ss.getSheetByName('現場マスタ');
+    const employeeMasterSheet = ss.getSheetByName('職員マスタ');
+    const vehicleMasterSheet = ss.getSheetByName('車両マスタ');
+    const workerMasterSheet = ss.getSheetByName('作業員マスタ');
+    const sloganMasterSheet = ss.getSheetByName('安全スローガンマスタ');
+    const machineMasterSheet = ss.getSheetByName('機械マスタ');
+    const siteEmployeeSheet = ss.getSheetByName('現場担当職員マスタ'); // 【追加】
+
+    // 存在チェック
+    if (!siteMasterSheet || !employeeMasterSheet || !vehicleMasterSheet || !workerMasterSheet || !sloganMasterSheet || !machineMasterSheet || !siteEmployeeSheet) {
+      throw new Error('必要なマスタシートのいずれかが見つかりません。');
+    }
+
+    // データ読み込み
+    const sites = getValues(siteMasterSheet);
+    // 【変更】 職員データに車両情報を含める
+    const employees = getValues(employeeMasterSheet).map(row => ({ name: row[0], role: row[1], vehicle: row[2] || '' }));
+    const vehicles = getValues(vehicleMasterSheet).flat();
+    const workers = getValues(workerMasterSheet).map(row => ({ name: row[0], trade: row[1] }));
+    const machines = getValues(machineMasterSheet).flat();
+    const siteEmployees = getValues(siteEmployeeSheet);
+    
+    // 月次情報を取得
+    const month = new Date().getMonth() + 1;
+    const sloganData = getValues(sloganMasterSheet);
+    let monthlyInfo = { slogan: '', priority: '', wireColor: '' };
+    for (const row of sloganData) {
+      if (row[0] == month) {
+        monthlyInfo = { slogan: row[1], priority: row[2], wireColor: row[3] };
+        break;
+      }
+    }
+    
+    // ユーザーに紐づく現場のみをフィルタリング
+    const userSites = getSitesForCurrentUser(sites);
+
+    return { userSites, sites, employees, vehicles, workers, monthlyInfo, machines, siteEmployees };
+
+  } catch (e) {
+    Logger.log(e);
+    return { error: e.message };
+  }
+}
+
+/**
+ * 工事番号で現場名と担当職員を取得する
+ */
+function getSiteByConstructionNumber(number) {
+    try {
+        const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+        const siteSheet = ss.getSheetByName('現場マスタ');
+        const siteEmployeeSheet = ss.getSheetByName('現場担当職員マスタ');
+        
+        if (!siteSheet || !siteEmployeeSheet) throw new Error("マスタシートが見つかりません。");
+        
+        const siteData = getValues(siteSheet);
+        let siteName = null;
+        // 【修正】より堅牢な比較方法に変更
+        for(const row of siteData) {
+            if(row[0] != null && row[0].toString().trim() == number.toString().trim()) {
+                siteName = row[1];
+                break;
+            }
+        }
+
+        if(!siteName) {
+            return { siteName: null, assignedEmployees: [] };
+        }
+
+        // 担当職員を取得
+        const siteEmployeeData = getValues(siteEmployeeSheet);
+        const assignedEmployees = siteEmployeeData
+            .filter(row => row[0] != null && row[0].toString().trim() == number.toString().trim())
+            .map(row => row[1]);
+
+        return { siteName, assignedEmployees };
+
+    } catch(e) {
+        Logger.log(e);
+        return { error: e.message };
+    }
+}
+
+
+/**
+ * 日報データを保存する
+ */
+function saveDailyReport(data) {
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const reportSheet = ss.getSheetByName('日報');
+    const employeeSheet = ss.getSheetByName('職員稼働データ');
+    const vehicleSheet = ss.getSheetByName('車両稼働データ');
+    const directSheet = ss.getSheetByName('直営稼働データ');
+    const machineSheet = ss.getSheetByName('機械稼働データ');
+    const subcontractorSheet = ss.getSheetByName('協力業者データ');
+
+    const now = new Date();
+    const reportId = Utilities.formatDate(now, 'JST', 'yyyyMMddHHmmss') + '-' + Math.random().toString(36).substr(2, 5);
+    const registrant = Session.getActiveUser().getEmail();
+
+    reportSheet.appendRow([
+      reportId, now, new Date(data.date), data.weather,
+      data.constructionNumber, data.siteName,
+      data.newWorkerEducation.education, data.newWorkerEducation.count, registrant
+    ]);
+
+    const employeeIdPrefix = reportId + '-e';
+    data.employees.forEach((d, i) => employeeSheet.appendRow([`${employeeIdPrefix}${i+1}`, reportId, d.name, d.shift, d.quantity]));
+    
+    const vehicleIdPrefix = reportId + '-v';
+    // 【変更】職員情報から車両データを分離して保存
+    data.employees.forEach((d, i) => {
+        if(d.vehicle && parseFloat(d.vehicleQuantity) > 0) {
+            vehicleSheet.appendRow([`${vehicleIdPrefix}${i+1}`, reportId, d.vehicle, d.vehicleQuantity]);
+        }
+    });
+
+    const directIdPrefix = reportId + '-d';
+    data.directWorkers.forEach((d, i) => directSheet.appendRow([`${directIdPrefix}${i+1}`, reportId, d.name, d.shift, d.quantity]));
+    
+    const machineIdPrefix = reportId + '-m';
+    data.machinery.forEach((d, i) => machineSheet.appendRow([`${machineIdPrefix}${i+1}`, reportId, d.name, d.quantity]));
+    
+    const subIdPrefix = reportId + '-s';
+    data.subcontractors.forEach((d, i) => subcontractorSheet.appendRow([`${subIdPrefix}${i+1}`, reportId, d.companyName, d.count, d.workContent, d.machinery]));
+
+    return { success: true, message: '日報を登録しました。' };
+  } catch (e) {
+    Logger.log(e);
+    return { success: false, message: 'エラー: ' + e.message };
+  }
+}
+
+/**
+ * 過去の日報リストを取得する
+ */
+function getPastReports() {
+    try {
+        const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+        const sheet = ss.getSheetByName('日報');
+        if(!sheet) throw new Error("日報シートが見つかりません。");
+
+        const data = getValues(sheet);
+        return data.map(row => ({
+            id: row[0],
+            date: Utilities.formatDate(new Date(row[2]), "JST", "yyyy/MM/dd"),
+            constructionNumber: row[4],
+            siteName: row[5]
+        })).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    } catch(e) {
+        Logger.log(e);
+        return { error: e.message };
+    }
+}
+
+/**
+ * 特定の日報の詳細データを取得する
+ */
+function getReportDetails(reportId) {
+    try {
+        const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+        const employeeSheet = ss.getSheetByName('職員稼働データ');
+        const vehicleSheet = ss.getSheetByName('車両稼働データ');
+        const directSheet = ss.getSheetByName('直営稼働データ');
+        const machineSheet = ss.getSheetByName('機械稼働データ');
+        const subcontractorSheet = ss.getSheetByName('協力業者データ');
+
+        const employees = getValues(employeeSheet).filter(r => r[1] === reportId).map(r => ({name: r[2], shift: r[3], quantity: r[4]}));
+        const vehicles = getValues(vehicleSheet).filter(r => r[1] === reportId).map(r => ({name: r[2], quantity: r[3]}));
+        const directWorkers = getValues(directSheet).filter(r => r[1] === reportId).map(r => ({name: r[2], shift: r[3], quantity: r[4]}));
+        const machinery = getValues(machineSheet).filter(r => r[1] === reportId).map(r => ({name: r[2], quantity: r[3]}));
+        const subcontractors = getValues(subcontractorSheet).filter(r => r[1] === reportId).map(r => ({companyName: r[2], count: r[3], workContent: r[4], machinery: r[5]}));
+
+        return { employees, vehicles, directWorkers, machinery, subcontractors };
+    } catch(e) {
+        Logger.log(e);
+        return { error: e.message };
+    }
+}
+
+
+// --- ヘルパー関数 ---
+function getValues(sheet) {
+  if (sheet.getLastRow() < 2) return [];
+  return sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+}
+
+function getSitesForCurrentUser(allSites) {
+    try {
+        const userEmail = Session.getActiveUser().getEmail();
+        if (!userEmail) return [];
+        const userId = userEmail.split('@')[0].toLowerCase();
+        //【変更】列インデックスを修正
+        return allSites.filter(row => row && row[2] && typeof row[2] === 'string' && row[2].toLowerCase() === userId);
+    } catch (e) {
+        Logger.log(`現場リストの取得に失敗: ${e.message}`);
+        return [];
+    }
+}
+
