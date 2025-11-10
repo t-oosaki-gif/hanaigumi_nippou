@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_top">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        body { background-color: #f8f9fa; }
+        .container { max-width: 900px; }
+        .card { margin-bottom: 1.5rem; }
+        .card-header { background-color: rgba(0,0,0,.03); }
+        .btn-sm-row { padding-top: 2rem; }
+        #loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(255, 255, 255, 0.7); display: none;
+            justify-content: center; align-items: center; z-index: 9999;
+        }
+        .sub-header {
+            font-size: 1rem;
+            font-weight: 500;
+            color: #6c757d;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-overlay">
+        <div class="spinner-border text-primary" role="status"></div>
+    </div>
+
+    <div class="container py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0">工事日報 入力</h2>
+            <a href="#" id="history-link" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-clock-history"></i> 過去日報を見る
+            </a>
+        </div>
+
+        <form id="report-form">
+            <!-- 基本情報 -->
+            <div class="card">
+                <div class="card-header">基本情報</div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="construction-number" class="form-label">工事番号</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="construction-number" placeholder="番号で検索...">
+                                <button class="btn btn-outline-secondary" type="button" id="search-btn"><i class="bi bi-search"></i></button>
+                            </div>
+                        </div>
+                        <div class="col-md-8">
+                            <label for="site-name" class="form-label">現場名</label>
+                            <select class="form-select" id="site-name" required></select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="date" class="form-label">日付</label>
+                            <input type="date" class="form-control" id="date" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="weather" class="form-label">天気</label>
+                            <select class="form-select" id="weather" required>
+                                <option value="晴">晴</option><option value="曇">曇</option><option value="雨">雨</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 安全衛生情報 -->
+            <div class="card">
+                <div class="card-header">安全衛生情報</div>
+                <div class="card-body">
+                     <p class="mb-2"><strong>安全スローガン:</strong> <span id="slogan"></span></p>
+                     <p class="mb-2"><strong>重点項目:</strong> <span id="priority"></span></p>
+                     <p class="mb-3"><strong>ワイヤー点検色:</strong> <span id="wire-color"></span></p>
+                     <hr>
+                     <div class="row">
+                       <div class="col-md-6"><label class="form-label">新規入場者教育</label>
+                         <div>
+                           <div class="form-check form-check-inline">
+                             <input class="form-check-input" type="radio" name="new-worker-education" id="education-yes" value="有り"><label class="form-check-label" for="education-yes">有り</label>
+                           </div>
+                           <div class="form-check form-check-inline">
+                             <input class="form-check-input" type="radio" name="new-worker-education" id="education-no" value="無し" checked><label class="form-check-label" for="education-no">無し</label>
+                           </div>
+                         </div>
+                       </div>
+                       <div class="col-md-6">
+                         <label for="new-worker-count" class="form-label">人数</label>
+                         <input type="number" class="form-control" id="new-worker-count" value="0" min="0" disabled>
+                       </div>
+                     </div>
+                </div>
+            </div>
+
+            <!-- 【変更】職員情報 -->
+            <div class="card">
+                <div class="card-header">職員情報</div>
+                <div class="card-body">
+                    <div id="employee-container"></div>
+                    <button type="button" class="btn btn-sm btn-secondary mt-2" onclick="addEmployeeRow()">＋ 職員手動追加</button>
+                </div>
+            </div>
+
+            <!-- 直営情報 -->
+            <div class="card">
+                <div class="card-header">直営情報</div>
+                <div class="card-body">
+                    <div class="sub-header">
+                        <span>作業員</span>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="addDirectWorkerRow()">＋ 追加</button>
+                    </div>
+                    <div id="direct-worker-container"></div>
+                    
+                    <div class="sub-header">
+                        <span>使用機械</span>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="addMachineryRow()">＋ 追加</button>
+                    </div>
+                    <div id="machinery-container"></div>
+                </div>
+            </div>
+            
+            <!-- 協力業者情報 -->
+            <div class="card">
+                <div class="card-header">協力業者情報</div>
+                <div class="card-body" id="subcontractor-container"></div>
+                <div class="card-footer bg-transparent border-0 text-end">
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="addSubcontractorRow()">＋ 協力業者を追加</button>
+                </div>
+            </div>
+
+            <div class="d-grid mt-4">
+                <button type="submit" class="btn btn-primary btn-lg">この内容で日報を保存</button>
+            </div>
+        </form>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let masterData = {};
+
+        // --- 初期化 ---
+        document.addEventListener('DOMContentLoaded', () => {
+            showLoading(true);
+            google.script.run.withSuccessHandler(onInitialData).withFailureHandler(onFailure).getInitialData();
+            google.script.run.withSuccessHandler(url => document.getElementById('history-link').href = url + '?page=history').getWebAppUrl();
+            document.getElementById('search-btn').addEventListener('click', searchByNumber);
+            document.getElementById('report-form').addEventListener('submit', onFormSubmit);
+             document.querySelectorAll('input[name="new-worker-education"]').forEach(radio => {
+              radio.addEventListener('change', e => document.getElementById('new-worker-count').disabled = e.target.value === '無し');
+            });
+        });
+
+        function onInitialData(data) {
+            if(data.error) { onFailure({message: data.error}); return; }
+            masterData = data;
+            
+            const siteSelect = document.getElementById('site-name');
+            siteSelect.innerHTML = '<option value="">現場を選択...</option>';
+            masterData.userSites.forEach(site => siteSelect.add(new Option(site[1], site[1], false, site[1] === siteSelect.value)));
+
+            document.getElementById('slogan').textContent = masterData.monthlyInfo.slogan || '未登録';
+            document.getElementById('priority').textContent = masterData.monthlyInfo.priority || '未登録';
+            document.getElementById('wire-color').textContent = masterData.monthlyInfo.wireColor || '未登録';
+
+            const today = new Date();
+            document.getElementById('date').value = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+            
+            addEmployeeRow();
+            addDirectWorkerRow();
+            addMachineryRow();
+            addSubcontractorRow();
+            showLoading(false);
+        }
+
+        // --- 行追加テンプレート ---
+        const createSelect = (options, placeholder) => `<select class="form-select"><option value="">${placeholder}</option>${options.map(o => `<option value="${o}">${o}</option>`).join('')}</select>`;
+        const createQuantitySelect = () => `<select class="form-select quantity-select"><option value="1.0">1.0</option><option value="0.5">0.5</option><option value="0">0</option></select>`;
+        
+        function addEmployeeRow(employeeName = '') {
+            const container = document.getElementById('employee-container');
+            const row = document.createElement('div');
+            row.className = 'row g-3 mb-3 align-items-center employee-row';
+            row.innerHTML = `
+                <div class="col-md-3">${createSelect(masterData.employees.map(e => e.name), '名前選択...')}</div>
+                <div class="col-md-3"><input type="text" class="form-control" placeholder="役職" readonly></div>
+                <div class="col-md-3"><input type="text" class="form-control" placeholder="車両" readonly></div>
+                <div class="col-md-1"><select class="form-select"><option value="日勤">日勤</option><option value="夜勤">夜勤</option></select></div>
+                <div class="col-md-1">${createQuantitySelect()}</div>
+                <div class="col-md-1 text-end"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.parentElement.parentElement.remove()">×</button></div>
+            `;
+            container.appendChild(row);
+
+            const nameSelect = row.querySelector('select');
+            nameSelect.addEventListener('change', e => {
+                const selected = masterData.employees.find(emp => emp.name === e.target.value);
+                const parentRow = e.target.closest('.row');
+                parentRow.querySelector('input[placeholder="役職"]').value = selected ? selected.role : '';
+                parentRow.querySelector('input[placeholder="車両"]').value = selected ? selected.vehicle : '';
+            });
+
+            // If an employee name is provided (for auto-population), select it and trigger change
+            if(employeeName) {
+                nameSelect.value = employeeName;
+                nameSelect.dispatchEvent(new Event('change'));
+            }
+        }
+
+        function addDirectWorkerRow() {
+            const container = document.getElementById('direct-worker-container');
+            const row = document.createElement('div');
+            row.className = 'row g-3 mb-3 align-items-center direct-worker-row';
+            row.innerHTML = `
+                <div class="col-md-4">${createSelect(masterData.workers.map(w => w.name), '名前選択...')}</div>
+                <div class="col-md-4"><input type="text" class="form-control" placeholder="職種" readonly></div>
+                <div class="col-md-2"><select class="form-select"><option value="日勤">日勤</option><option value="夜勤">夜勤</option></select></div>
+                <div class="col-md-1">${createQuantitySelect()}</div>
+                <div class="col-md-1 text-end"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.parentElement.parentElement.remove()">×</button></div>
+            `;
+            container.appendChild(row);
+            row.querySelector('select').addEventListener('change', e => {
+                const selected = masterData.workers.find(w => w.name === e.target.value);
+                e.target.closest('.row').querySelector('input[readonly]').value = selected ? selected.trade : '';
+            });
+        }
+        
+        function addMachineryRow() {
+            const container = document.getElementById('machinery-container');
+            const row = document.createElement('div');
+            row.className = 'row g-3 mb-3 align-items-center machinery-row';
+            row.innerHTML = `
+                <div class="col-md-10">${createSelect(masterData.machines, '機械選択...')}</div>
+                <div class="col-md-1">${createQuantitySelect()}</div>
+                <div class="col-md-1 text-end"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.parentElement.parentElement.remove()">×</button></div>
+            `;
+            container.appendChild(row);
+        }
+
+        function addSubcontractorRow() {
+            const container = document.getElementById('subcontractor-container');
+            const row = document.createElement('div');
+            row.className = 'subcontractor-row border-top pt-3 mb-3';
+            row.innerHTML = `
+                <div class="row g-3">
+                    <div class="col-md-11">
+                        <div class="row g-3">
+                            <div class="col-md-8"><label class="form-label small">会社名</label><input type="text" class="form-control"></div>
+                            <div class="col-md-4"><label class="form-label small">人数</label><input type="number" class="form-control" min="0"></div>
+                            <div class="col-md-6"><label class="form-label small">作業内容</label><textarea class="form-control" rows="2"></textarea></div>
+                            <div class="col-md-6"><label class="form-label small">使用機械</label><textarea class="form-control" rows="2"></textarea></div>
+                        </div>
+                    </div>
+                    <div class="col-md-1 text-end btn-sm-row"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.parentElement.parentElement.parentElement.remove()">×</button></div>
+                </div>
+            `;
+            container.appendChild(row);
+        }
+
+        // --- イベントハンドラ ---
+        function searchByNumber() {
+            const number = document.getElementById('construction-number').value.trim();
+            if(!number) return;
+            showLoading(true);
+            google.script.run.withSuccessHandler(result => {
+                if(result.error) { onFailure({message: result.error}); return; }
+                if(result.siteName) {
+                    const siteSelect = document.getElementById('site-name');
+                    // Check if option exists, if not, create it
+                    let option = Array.from(siteSelect.options).find(opt => opt.text === result.siteName);
+                    if (!option) {
+                        option = new Option(result.siteName, result.siteName);
+                        siteSelect.add(option);
+                    }
+                    siteSelect.value = result.siteName;
+
+                    // Auto-populate employees
+                    const employeeContainer = document.getElementById('employee-container');
+                    employeeContainer.innerHTML = ''; // Clear existing rows
+                    if (result.assignedEmployees && result.assignedEmployees.length > 0) {
+                        result.assignedEmployees.forEach(name => addEmployeeRow(name));
+                    } else {
+                        addEmployeeRow(); // Add one blank row if no one is assigned
+                    }
+                } else {
+                    alert('該当する工事番号が見つかりませんでした。');
+                }
+                showLoading(false);
+            }).withFailureHandler(onFailure).getSiteByConstructionNumber(number);
+        }
+
+        function onFormSubmit(e) {
+            e.preventDefault();
+            showLoading(true);
+            
+            const data = {
+                constructionNumber: document.getElementById('construction-number').value,
+                siteName: document.getElementById('site-name').value,
+                date: document.getElementById('date').value,
+                weather: document.getElementById('weather').value,
+                newWorkerEducation: {
+                    education: document.querySelector('input[name="new-worker-education"]:checked').value,
+                    count: document.getElementById('new-worker-count').value
+                },
+                employees: Array.from(document.querySelectorAll('.employee-row')).map(r => ({
+                    name: r.children[0].querySelector('select').value,
+                    vehicle: r.children[2].querySelector('input').value, // Vehicle is now an input
+                    shift: r.children[3].querySelector('select').value,
+                    quantity: r.children[4].querySelector('select').value,
+                    vehicleQuantity: r.children[4].querySelector('select').value // Assuming vehicle quantity is same as employee
+                })).filter(d => d.name),
+                directWorkers: Array.from(document.querySelectorAll('.direct-worker-row')).map(r => ({
+                    name: r.children[0].querySelector('select').value,
+                    shift: r.children[2].querySelector('select').value,
+                    quantity: r.children[3].querySelector('select').value
+                })).filter(d => d.name),
+                machinery: Array.from(document.querySelectorAll('.machinery-row')).map(r => ({
+                    name: r.children[0].querySelector('select').value,
+                    quantity: r.children[1].querySelector('select').value
+                })).filter(d => d.name),
+                subcontractors: Array.from(document.querySelectorAll('.subcontractor-row')).map(r => ({
+                    companyName: r.querySelector('input[type="text"]').value,
+                    count: r.querySelector('input[type="number"]').value,
+                    workContent: r.querySelectorAll('textarea')[0].value,
+                    machinery: r.querySelectorAll('textarea')[1].value
+                })).filter(d => d.companyName),
+            };
+
+            google.script.run.withSuccessHandler(onSaveSuccess).withFailureHandler(onFailure).saveDailyReport(data);
+        }
+
+        function onSaveSuccess(response) {
+            showLoading(false);
+            if(response.success) {
+                alert(response.message);
+                window.location.reload();
+            } else {
+                onFailure({message: response.message});
+            }
+        }
+
+        // --- ユーティリティ ---
+        function onFailure(error) {
+            showLoading(false);
+            alert('エラーが発生しました: ' + error.message);
+        }
+        function showLoading(show) {
+            document.getElementById('loading-overlay').style.display = show ? 'flex' : 'none';
+        }
+    </script>
+</body>
+</html>
+
